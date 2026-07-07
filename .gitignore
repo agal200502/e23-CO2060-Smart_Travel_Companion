@@ -1,0 +1,12 @@
+# Maven build output
+backend/target/
+
+# Local configuration
+backend/src/main/resources/application-local.properties
+
+# VS Code
+.vscode/
+
+# OS files
+.DS_Store
+Thumbs.db
