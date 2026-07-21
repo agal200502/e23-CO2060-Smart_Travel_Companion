@@ -35,6 +35,9 @@ public class Booking {
     @Column(name = "check_out", nullable = false)
     private Timestamp checkOut;
 
+    @Column(name = "rooms_booked", nullable = false)
+    private Integer roomsBooked;
+
     @Column(nullable = false)
     private Integer guests;
 
@@ -71,6 +74,14 @@ public class Booking {
 
     public Timestamp getCheckOut() { return checkOut; }
     public void setCheckOut(Timestamp checkOut) { this.checkOut = checkOut; }
+
+    public Integer getRoomsBooked() {
+        return roomsBooked;
+    }
+
+    public void setRoomsBooked(Integer roomsBooked) {
+        this.roomsBooked = roomsBooked;
+    }
 
     public Integer getGuests() { return guests; }
     public void setGuests(Integer guests) { this.guests = guests; }

@@ -6,6 +6,7 @@ public class BookingRequest {
     private Long accommodationId;
     private LocalDate checkIn;
     private LocalDate checkOut;
+    private Integer roomsBooked;
     private Integer guests;
 
     public Long getAccommodationId() {
@@ -38,5 +39,12 @@ public class BookingRequest {
 
     public void setGuests(Integer guests) {
         this.guests = guests;
+    }
+    public Integer getRoomsBooked() {
+        return roomsBooked;
+    }
+
+    public void setRoomsBooked(Integer roomsBooked) {
+        this.roomsBooked = roomsBooked;
     }
 }

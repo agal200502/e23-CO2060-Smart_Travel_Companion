@@ -14,6 +14,7 @@ const Booking = () => {
     checkIn: '',
     checkOut: '',
     guests: 1,
+    roomsBooked: 1,
   });
 
   const today = new Date().toISOString().slice(0, 10);
@@ -49,7 +50,10 @@ const Booking = () => {
     setFormData((prev) => {
       const next = {
         ...prev,
-        [name]: name === 'guests' ? Number(value) : value,
+        [name]:
+          name === 'guests' || name === 'roomsBooked'
+            ? Number(value)
+            : value,
       };
       if (name === 'checkIn' && next.checkOut && new Date(next.checkOut) <= new Date(value)) {
         next.checkOut = '';
@@ -67,7 +71,7 @@ const Booking = () => {
   };
 
   const nights = calculateNights();
-  const totalPrice = accommodation?.price ? accommodation.price * nights : 0;
+  const totalPrice = accommodation?.price ? accommodation.price * nights * formData.roomsBooked : 0;
 
   const handleSubmit = async (event) => {
     event.preventDefault();
@@ -88,6 +92,12 @@ const Booking = () => {
       setError('Check-out date must be after check-in date.');
       return;
     }
+    if (formData.roomsBooked > accommodation.totalRooms) {
+      setError(
+        `Only ${accommodation.totalRooms} room(s) are available.`
+      );
+      return;
+    }
 
     try {
       await api.post('/bookings', {
@@ -95,6 +105,7 @@ const Booking = () => {
         checkIn: formData.checkIn,
         checkOut: formData.checkOut,
         guests: formData.guests,
+        roomsBooked: formData.roomsBooked,
       });
       navigate(`/accommodation/${accommodation.locationId}`, {
         state: { bookingSuccess: true, bookingStatus: 'PENDING', bookedAccommodationId: accommodation.id },
@@ -178,6 +189,19 @@ const Booking = () => {
               name="guests"
               min="1"
               value={formData.guests}
+              onChange={handleChange}
+              required
+            />
+          </label>
+
+          <label>
+            Rooms Required
+            <input
+              type="number"
+              name="roomsBooked"
+              min="1"
+              max={accommodation.totalRooms}
+              value={formData.roomsBooked}
               onChange={handleChange}
               required
             />

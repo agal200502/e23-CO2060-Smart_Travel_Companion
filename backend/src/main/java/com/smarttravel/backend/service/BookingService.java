@@ -43,14 +43,16 @@ public class BookingService {
                 .orElseThrow(() -> new ResourceNotFoundException("Accommodation not found"));
 
         int nights = calculateNights(request.getCheckIn(), request.getCheckOut());
-        BigDecimal totalPrice = accommodation.getPrice().multiply(BigDecimal.valueOf(nights));
+        BigDecimal totalPrice = accommodation.getPrice().multiply(BigDecimal.valueOf(nights)).multiply(BigDecimal.valueOf(request.getRoomsBooked()));
 
         
         Integer configuredRooms = accommodation.getTotalRooms();
-int totalRooms = (configuredRooms == null || configuredRooms <= 0) ? 1 : configuredRooms;
-        int bookedRooms = findBookedRooms(accommodation.getId(), request.getCheckIn(), request.getCheckOut());
-        if (bookedRooms >= totalRooms) {
-            throw new IllegalArgumentException("Rooms are not available for the selected dates.");
+
+        int totalRooms = (configuredRooms == null) ? 0 : configuredRooms;
+
+        if (request.getRoomsBooked() > totalRooms) {
+            throw new IllegalArgumentException(
+                    "Only " + totalRooms + " room(s) are available.");
         }
 
         Booking booking = new Booking();
@@ -59,10 +61,18 @@ int totalRooms = (configuredRooms == null || configuredRooms <= 0) ? 1 : configu
         booking.setCheckIn(Timestamp.valueOf(request.getCheckIn().atStartOfDay()));
         booking.setCheckOut(Timestamp.valueOf(request.getCheckOut().atStartOfDay()));
         booking.setGuests(request.getGuests());
+        booking.setRoomsBooked(request.getRoomsBooked());
         booking.setTotalPrice(totalPrice);
         booking.setStatus(BookingStatus.PENDING);
 
-        return bookingRepository.save(booking);
+        Booking savedBooking = bookingRepository.save(booking);
+
+        accommodation.setTotalRooms(
+                accommodation.getTotalRooms() - request.getRoomsBooked());
+
+        accommodationRepository.save(accommodation);
+
+        return savedBooking;
     }
 
     public List<Booking> getBookingsForUser(Long userId) {
@@ -77,6 +87,16 @@ int totalRooms = (configuredRooms == null || configuredRooms <= 0) ? 1 : configu
     @Transactional
     public void cancelBooking(Long bookingId) {
         Booking booking = getBookingById(bookingId);
+        if (booking.getStatus() == BookingStatus.CANCELLED) {
+            return;
+        }
+
+        Accommodation accommodation = booking.getAccommodation();
+
+        accommodation.setTotalRooms(
+                accommodation.getTotalRooms() + booking.getRoomsBooked());
+
+        accommodationRepository.save(accommodation);
         booking.setStatus(BookingStatus.CANCELLED);
         bookingRepository.save(booking);
     }

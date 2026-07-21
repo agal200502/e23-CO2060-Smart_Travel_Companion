@@ -322,7 +322,7 @@ const TripPlanner = () => {
           {/* Step 1 */}
           <div style={{ marginBottom: '2rem' }}>
             <label style={{ display: 'block', fontWeight: '600', marginBottom: '8px', color: 'var(--text-light)', fontSize: '15px' }}>
-              📍 Step 1 — Select Your Starting Location
+               Step 1 - Select Your Starting Location
             </label>
             <select
               className="form-control"
@@ -339,7 +339,7 @@ const TripPlanner = () => {
           {/* Step 2 */}
           <div style={{ marginBottom: '2rem' }}>
             <label style={{ display: 'block', fontWeight: '600', marginBottom: '8px', color: 'var(--text-light)', fontSize: '15px' }}>
-              🗺️ Step 2 — Select Places to Visit
+               Step 2 — Select Places to Visit
             </label>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '8px' }}>
               {locations
@@ -431,7 +431,7 @@ const TripPlanner = () => {
                 })}
               </div>
               <div style={{ fontSize: '13px', color: 'var(--text-muted)', marginBottom: '1rem' }}>
-                📏 Total estimated distance:{' '}
+                   Total estimated distance:{' '}
                 <strong style={{ color: '#00d4aa' }}>
                   {dijkstraResult.reduce((total, loc, i) => {
                     if (i === 0) return 0;
@@ -446,7 +446,7 @@ const TripPlanner = () => {
               </div>
               <div style={{ display: 'flex', gap: '0.5rem' }}>
                 <button className="btn btn-primary" onClick={applyDijkstraToItinerary}>
-                  ✅ Apply & View on Map
+                   Apply & View on Map
                 </button>
                 <button className="btn btn-outline" onClick={() => setDijkstraResult(null)}>
                   Recalculate
