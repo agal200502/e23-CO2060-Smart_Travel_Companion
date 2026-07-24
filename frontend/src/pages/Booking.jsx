@@ -100,13 +100,19 @@ const Booking = () => {
     }
 
     try {
-      await api.post('/bookings', {
-        accommodationId: accommodation.id,
-        checkIn: formData.checkIn,
-        checkOut: formData.checkOut,
-        guests: formData.guests,
-        roomsBooked: formData.roomsBooked,
-      });
+      await api.post(
+        '/bookings',
+        {
+          accommodationId: accommodation.id,
+          checkIn: formData.checkIn,
+          checkOut: formData.checkOut,
+          guests: formData.guests,
+          roomsBooked: formData.roomsBooked,
+        },
+        {
+          silent: true,
+        }
+      );
       navigate(`/accommodation/${accommodation.locationId}`, {
         state: { bookingSuccess: true, bookingStatus: 'PENDING', bookedAccommodationId: accommodation.id },
       });

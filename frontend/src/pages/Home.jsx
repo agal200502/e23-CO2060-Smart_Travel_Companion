@@ -14,11 +14,20 @@ const Home = () => {
     const fetchLocations = async () => {
       try {
         const response = await api.get('/locations');
-        setFeaturedLocations(response.data.slice(0, 3));
+
+        console.log('Locations API response:', response.data);
+
+        const locations = Array.isArray(response.data)
+          ? response.data
+          : response.data.locations || response.data.content || [];
+
+        setFeaturedLocations(locations.slice(0, 3));
       } catch (error) {
         console.error('Failed to fetch locations', error);
+        setFeaturedLocations([]);
       }
     };
+
     fetchLocations();
   }, []);
 
@@ -59,9 +68,10 @@ const Home = () => {
         </div>
 
         <div className="grid">
-          {featuredLocations.map((location) => (
-            <LocationCard key={location.id} location={location} />
-          ))}
+          {Array.isArray(featuredLocations) &&
+            featuredLocations.map((location) => (
+              <LocationCard key={location.id} location={location} />
+            ))}
         </div>
 
         <div className="text-center mt-2">
