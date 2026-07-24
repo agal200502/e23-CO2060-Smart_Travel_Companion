@@ -17,8 +17,8 @@ INSERT INTO locations (name, description, district, image_url, latitude, longitu
 INSERT INTO accommodations (name, location_id, price, rating, total_rooms, image_url) VALUES
 ('Sigiriya Village Hotel', 1, 150.00, 4.5, 10, 'https://images.unsplash.com/photo-1566073771259-6a8506099945?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80'),
 ('Hotel Sigiriya', 1, 120.00, 4.2, 8, 'https://lh3.googleusercontent.com/gps-cs-s/APNQkAFq4cJPqN9qdfzqFJ--WImMq7Qzefd70lQFjC2K72CCxzh5TX-NQX3KxZBzVsW0Yz62t3RYRfBMneQJi9yZrpzQKF0G_YovxNIxE-MPIzUQDVf6elaM_AkdWWFF2De5InJeb6VVaYKfpOT3=s680-w680-h510-rw'),
-('Kandy City Hotel', 2, 80.00, 4.0, 12, 'https://lh5.googleusercontent.com/proxy/U8tCfTi_zFgXuMHheskbWcaEFmxnyf111DJnuSaT9uW3C_EZCzGkzvZwgycdBCZtHXrQcrgrMNNKwJZvnRSsN6JgtJEQJRBYFIMh_jV9ThMmyNeZKZoZvGcvCpsKesGUXl-4dTr9jcgmfAUb5PZ_KYjtgJXSJg=w252-h168-k-no')
-('Cinnamon Citadel', 2, 200.00, 4.8, 'https://images.unsplash.com/photo-1571003123894-1f0594d2b5d9?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80'),
+('Kandy City Hotel', 2, 80.00, 4.0, 12, 'https://lh5.googleusercontent.com/proxy/U8tCfTi_zFgXuMHheskbWcaEFmxnyf111DJnuSaT9uW3C_EZCzGkzvZwgycdBCZtHXrQcrgrMNNKwJZvnRSsN6JgtJEQJRBYFIMh_jV9ThMmyNeZKZoZvGcvCpsKesGUXl-4dTr9jcgmfAUb5PZ_KYjtgJXSJg=w252-h168-k-no'),
+('Cinnamon Citadel', 2, 200.00, 4.8, 15, 'https://images.unsplash.com/photo-1571003123894-1f0594d2b5d9?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80'),
 ('Yala Safari Lodge', 3, 250.00, 4.7, 6, 'https://images.unsplash.com/photo-1497366216548-37526070297c?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80'),
 ('Galle Heritage Hotel', 4, 180.00, 4.6, 9, 'https://images.unsplash.com/photo-1564501049412-61c2a3083791?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80'),
 ('Ella Flower Garden Resort', 5, 60.00, 4.3, 5, 'https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80');

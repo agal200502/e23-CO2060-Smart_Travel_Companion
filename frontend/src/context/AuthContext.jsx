@@ -47,19 +47,38 @@ export const AuthProvider = ({ children }) => {
   // Login function
   const login = (token) => {
     try {
-      localStorage.setItem('token', token);
+      if (!token || typeof token !== 'string') {
+        throw new Error('Missing or invalid JWT token');
+      }
+
       const decoded = jwtDecode(token);
 
+      if (decoded.exp && decoded.exp * 1000 < Date.now()) {
+        throw new Error('JWT token has expired');
+      }
+
+      localStorage.setItem('token', token);
+
       setUser({
-        username: decoded.sub || decoded.username || decoded.email || '',
-        role: decoded.role || decoded.roles || 'ROLE_USER',
+        username:
+          decoded.sub ||
+          decoded.username ||
+          decoded.email ||
+          '',
+        role:
+          decoded.role ||
+          decoded.roles ||
+          'ROLE_USER',
       });
+
+      return true;
     } catch (error) {
-      console.error("Login failed:", error);
+      console.error('Login failed:', error);
+      localStorage.removeItem('token');
       setUser(null);
+      return false;
     }
   };
-
   // Logout function
   const logout = () => {
     localStorage.removeItem('token');

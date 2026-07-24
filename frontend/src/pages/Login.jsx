@@ -14,15 +14,39 @@ const Login = () => {
   const from = location.state?.from?.pathname || '/';
 
   const handleSubmit = async (e) => {
-    e.preventDefault();
-    try {
-      const response = await api.post('/auth/login', { email, password });
-      login(response.data.accessToken);
-      navigate(from, { replace: true });
-    } catch (err) {
-      setError('Invalid email or password');
+  e.preventDefault();
+  setError('');
+
+  try {
+    const response = await api.post('/auth/login', {
+      email,
+      password,
+    });
+
+    console.log('Login response:', response.data);
+
+    const token =
+      response.data.accessToken ||
+      response.data.token ||
+      response.data.jwtToken;
+
+    if (!token) {
+      throw new Error('No JWT token returned by backend');
     }
-  };
+
+    const success = login(token);
+
+    if (!success) {
+      throw new Error('Could not process login token');
+    }
+
+    navigate(from, { replace: true });
+  } catch (err) {
+    console.error('Login error:', err);
+    console.error('Backend response:', err.response?.data);
+    setError('Invalid email or password');
+  }
+};
 
   return (
     <div className="container animate-fade-in mb-4" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '60vh' }}>
