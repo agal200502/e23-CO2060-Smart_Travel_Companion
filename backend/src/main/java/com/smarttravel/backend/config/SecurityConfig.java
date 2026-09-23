@@ -79,9 +79,9 @@ public class SecurityConfig {
 
         configuration.setAllowedOrigins(Arrays.asList(
             "http://localhost:5173",
+            "https://e23-co2060-smart-travel-companion-iz8hlwgwr-tech-flux.vercel.app",
             "https://e23-co-2060-smart-travel-companion.vercel.app"
         ));
-
         configuration.setAllowedMethods(Arrays.asList(
             "GET",
             "POST",
@@ -91,11 +91,7 @@ public class SecurityConfig {
             "OPTIONS"
         ));
 
-        configuration.setAllowedHeaders(Arrays.asList(
-            "Authorization",
-            "Content-Type",
-            "X-Auth-Token"
-        ));
+        configuration.setAllowedHeaders(Arrays.asList("*"));
 
         configuration.setExposedHeaders(Arrays.asList(
             "X-Auth-Token"
