@@ -108,6 +108,10 @@ public class SecurityConfig {
             .requestMatchers("/api/accommodations/**")
             .permitAll()
 
+            // Public itinerary generation
+            .requestMatchers("/api/itineraries/generate")
+            .permitAll()
+
             // Admin APIs
             .requestMatchers("/api/admin/**")
             .hasAuthority("ROLE_ADMIN")

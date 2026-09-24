@@ -20,6 +20,9 @@ public class Location {
     @Column(length = 100)
     private String district;
 
+    @Column(length = 100)
+    private String category;
+
     @Column(name = "image_url", length = 500)
     private String imageUrl;
 
@@ -64,6 +67,14 @@ public class Location {
 
     public void setDistrict(String district) {
         this.district = district;
+    }
+
+    public String getCategory() {
+        return category;
+    }
+
+    public void setCategory(String category) {
+        this.category = category;
     }
 
     public String getImageUrl() {
