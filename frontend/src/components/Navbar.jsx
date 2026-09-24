@@ -1,7 +1,7 @@
 import React, { useContext, useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext';
-import { Map, Compass, Home, LogOut, User, ShieldAlert, Menu, X } from 'lucide-react';
+import { Map, Compass, Home, LogOut, User, ShieldAlert, Menu, X, Sparkles } from 'lucide-react';
 import './Navbar.css';
 
 const Navbar = () => {
@@ -66,6 +66,16 @@ const Navbar = () => {
                   onClick={() => setMenuOpen(false)}
                 >
                   <Compass size={18} /> Planner
+                </Link>
+              </li>
+
+              <li>
+                <Link 
+                  to="/auto-generator" 
+                  className={`nav-link ${isActive('/auto-generator') ? 'active-link' : ''}`}
+                  onClick={() => setMenuOpen(false)}
+                >
+                  <Sparkles size={18} /> Auto Generator
                 </Link>
               </li>
 

@@ -322,7 +322,7 @@ const TripPlanner = () => {
           {/* Step 1 */}
           <div style={{ marginBottom: '2rem' }}>
             <label style={{ display: 'block', fontWeight: '600', marginBottom: '8px', color: 'var(--text-light)', fontSize: '15px' }}>
-               Step 1 - Select Your Starting Location
+               Step 1 — Select Your Starting Location
             </label>
             <select
               className="form-control"

@@ -7,6 +7,7 @@ import Explore from './pages/Explore';
 import Accommodation from './pages/Accommodation';
 import MapPage from './pages/MapPage';
 import TripPlanner from './pages/TripPlanner';
+import AutoGenerator from './pages/AutoGenerator';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import AdminLogin from './pages/AdminLogin';
@@ -45,6 +46,11 @@ const App = () => {
           <Route path="/planner" element={
             <PrivateRoute>
               <TripPlanner />
+            </PrivateRoute>
+          } />
+          <Route path="/auto-generator" element={
+            <PrivateRoute>
+              <AutoGenerator />
             </PrivateRoute>
           } />
           <Route path="/login" element={<Login />} />
