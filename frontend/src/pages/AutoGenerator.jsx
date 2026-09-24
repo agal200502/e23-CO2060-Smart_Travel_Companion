@@ -91,6 +91,7 @@ const AutoGenerator = () => {
     }
   }, []);
 
+  // Handle map rendering when tab becomes active or itinerary changes
   useEffect(() => {
     if (activeTab === 'map') {
       const timer = setTimeout(() => {
@@ -130,12 +131,104 @@ const AutoGenerator = () => {
     setLoadingSaved(true);
     try {
       const data = await getSavedItineraries();
-      setSavedTrips(data);
+      if (Array.isArray(data)) {
+        setSavedTrips(data);
+      }
     } catch (err) {
       console.error('Failed to fetch saved itineraries:', err);
     } finally {
       setLoadingSaved(false);
     }
+  };
+
+  // ── Schedule Recalculation Engine ──────────────────────────────────────
+
+  const recalculateSchedule = (itineraryObj) => {
+    if (!itineraryObj || !itineraryObj.days) return itineraryObj;
+
+    const paceVal = itineraryObj.pace || 'MODERATE';
+    const visitDuration = paceVal === 'RELAXED' ? 90 : paceVal === 'PACKED' ? 45 : 60;
+    let grandTotalDist = 0;
+    let grandTotalDrive = 0;
+
+    let previousEndLoc = itineraryObj.startLocation;
+
+    const recalculatedDays = itineraryObj.days.map((day, dIdx) => {
+      let currentMins = 8 * 60 + 30; // default 08:30
+      if (itineraryObj.dailyStartTime) {
+        const parts = itineraryObj.dailyStartTime.split(':').map(Number);
+        if (!isNaN(parts[0]) && !isNaN(parts[1])) currentMins = parts[0] * 60 + parts[1];
+      }
+
+      let dayDist = 0;
+      let dayDrive = 0;
+      let prevLoc = dIdx === 0 ? itineraryObj.startLocation : previousEndLoc;
+      let lunchTaken = false;
+
+      const recalculatedStops = (day.stops || []).map((stop, sIdx) => {
+        const currentLoc = stop.location;
+        let driveKm = 0;
+        let driveMins = 0;
+
+        if (prevLoc && currentLoc && prevLoc.id !== currentLoc.id && prevLoc.latitude && currentLoc.latitude) {
+          driveKm = Math.round(haversine(prevLoc.latitude, prevLoc.longitude, currentLoc.latitude, currentLoc.longitude) * 1.2 * 10) / 10;
+          driveMins = Math.max(5, Math.round((driveKm / 45) * 60));
+        }
+
+        currentMins += driveMins;
+        dayDist += driveKm;
+        dayDrive += driveMins;
+
+        // Lunch break check between 12:00 (720 min) and 13:30 (810 min)
+        if (!lunchTaken && currentMins >= 720 && currentMins <= 810) {
+          currentMins += 45; // 45 min lunch break
+          lunchTaken = true;
+        }
+
+        const arrH = Math.floor(currentMins / 60) % 24;
+        const arrM = currentMins % 60;
+        const arrivalStr = `${arrH.toString().padStart(2, '0')}:${arrM.toString().padStart(2, '0')}`;
+
+        currentMins += visitDuration;
+
+        const depH = Math.floor(currentMins / 60) % 24;
+        const depM = currentMins % 60;
+        const departureStr = `${depH.toString().padStart(2, '0')}:${depM.toString().padStart(2, '0')}`;
+
+        prevLoc = currentLoc;
+
+        return {
+          ...stop,
+          stopOrder: sIdx + 1,
+          arrivalTime: arrivalStr,
+          departureTime: departureStr,
+          visitDuration: visitDuration,
+          travelDistance: driveKm,
+          travelDuration: driveMins
+        };
+      });
+
+      if (recalculatedStops.length > 0) {
+        previousEndLoc = recalculatedStops[recalculatedStops.length - 1].location;
+      }
+
+      grandTotalDist += dayDist;
+      grandTotalDrive += dayDrive;
+
+      return {
+        ...day,
+        totalDistance: Math.round(dayDist * 10) / 10,
+        totalDriveMinutes: dayDrive,
+        stops: recalculatedStops
+      };
+    });
+
+    return {
+      ...itineraryObj,
+      totalDistance: Math.round(grandTotalDist * 10) / 10,
+      totalDriveMinutes: grandTotalDrive,
+      days: recalculatedDays
+    };
   };
 
   // ── Auto-Generator Wizard Handlers ─────────────────────────────────────
@@ -302,7 +395,7 @@ const AutoGenerator = () => {
       localStorage.setItem('smartTravelDraftItinerary', JSON.stringify(saved));
       setSaveSuccessMsg('Itinerary saved successfully to your account!');
 
-      // Immediate state update so Saved Trips tab displays the new trip right away
+      // Update savedTrips state immediately in frontend
       try {
         const refreshedList = await getSavedItineraries();
         if (Array.isArray(refreshedList) && refreshedList.length > 0) {
@@ -346,7 +439,7 @@ const AutoGenerator = () => {
     setActiveTab('timeline');
   };
 
-  // ── Stop Manipulation (Reorder / Remove / Add) ─────────────────────────
+  // ── Stop Manipulation (Reorder / Remove / Add) with Auto Recalculate ──
 
   const handleRemoveStop = (dayIndex, stopIndex) => {
     if (!currentItinerary) return;
@@ -355,7 +448,7 @@ const AutoGenerator = () => {
     day.stops = day.stops.filter((_, idx) => idx !== stopIndex);
     updatedDays[dayIndex] = day;
 
-    const updated = { ...currentItinerary, days: updatedDays };
+    const updated = recalculateSchedule({ ...currentItinerary, days: updatedDays });
     setCurrentItinerary(updated);
     localStorage.setItem('smartTravelDraftItinerary', JSON.stringify(updated));
   };
@@ -373,12 +466,35 @@ const AutoGenerator = () => {
     day.stops = stops;
     updatedDays[dayIndex] = day;
 
-    const updated = { ...currentItinerary, days: updatedDays };
+    const updated = recalculateSchedule({ ...currentItinerary, days: updatedDays });
     setCurrentItinerary(updated);
     localStorage.setItem('smartTravelDraftItinerary', JSON.stringify(updated));
   };
 
-  // ── Leaflet Multi-Day Map Implementation ────────────────────────────────
+  const handleAddStopToDay = (dayIndex, locationId) => {
+    if (!currentItinerary) return;
+    const loc = locations.find(l => l.id.toString() === locationId.toString());
+    if (!loc) return;
+
+    const updatedDays = [...currentItinerary.days];
+    const day = { ...updatedDays[dayIndex] };
+    const newStop = {
+      location: loc,
+      stopOrder: (day.stops?.length || 0) + 1,
+      visitDuration: 60,
+      travelDistance: 0,
+      travelDuration: 0
+    };
+
+    day.stops = [...(day.stops || []), newStop];
+    updatedDays[dayIndex] = day;
+
+    const updated = recalculateSchedule({ ...currentItinerary, days: updatedDays });
+    setCurrentItinerary(updated);
+    localStorage.setItem('smartTravelDraftItinerary', JSON.stringify(updated));
+  };
+
+  // ── Leaflet Multi-Day Map Implementation with OSRM Road Routes ──────────
 
   const initMap = () => {
     if (!mapRef.current || mapInstanceRef.current || !window.L) return;
@@ -388,6 +504,7 @@ const AutoGenerator = () => {
       attribution: '© OpenStreetMap contributors', maxZoom: 18,
     }).addTo(map);
     mapInstanceRef.current = map;
+    map.invalidateSize();
     updateMap();
   };
 
@@ -408,7 +525,8 @@ const AutoGenerator = () => {
     map.invalidateSize();
     const allLatLngs = [];
 
-    currentItinerary.days?.forEach((day, dIdx) => {
+    for (let dIdx = 0; dIdx < (currentItinerary.days || []).length; dIdx++) {
+      const day = currentItinerary.days[dIdx];
       const dayColor = DAY_COLORS[dIdx % DAY_COLORS.length];
       const validStops = (day.stops || []).filter(s => s.location && s.location.latitude && s.location.longitude);
       const dayLatLngs = [];
@@ -475,13 +593,45 @@ const AutoGenerator = () => {
         }
       }
 
-      if (dayLatLngs.length >= 2) {
-        routeLayersRef.current.push(
-          L.polyline(dayLatLngs, { color: '#000', weight: 6, opacity: 0.15 }).addTo(map),
-          L.polyline(dayLatLngs, { color: dayColor, weight: 4, opacity: 0.85, dashArray: '6, 6' }).addTo(map)
-        );
+      // Fetch OSRM real road routes between consecutive stops of the day
+      if (validStops.length >= 2) {
+        for (let i = 0; i < validStops.length - 1; i++) {
+          const from = validStops[i].location;
+          const to = validStops[i + 1].location;
+          try {
+            const url = `https://router.project-osrm.org/route/v1/driving/` +
+              `${parseFloat(from.longitude)},${parseFloat(from.latitude)};` +
+              `${parseFloat(to.longitude)},${parseFloat(to.latitude)}` +
+              `?overview=full&geometries=geojson`;
+
+            const res = await fetch(url);
+            const data = await res.json();
+
+            if (data.code === 'Ok' && data.routes && data.routes.length > 0) {
+              const coords = data.routes[0].geometry.coordinates.map(c => [c[1], c[0]]);
+              routeLayersRef.current.push(
+                L.polyline(coords, { color: '#000', weight: 7, opacity: 0.15 }).addTo(map),
+                L.polyline(coords, { color: dayColor, weight: 4, opacity: 0.9 }).addTo(map)
+              );
+            } else {
+              routeLayersRef.current.push(
+                L.polyline([
+                  [parseFloat(from.latitude), parseFloat(from.longitude)],
+                  [parseFloat(to.latitude), parseFloat(to.longitude)],
+                ], { color: dayColor, weight: 3, opacity: 0.7, dashArray: '6,6' }).addTo(map)
+              );
+            }
+          } catch (err) {
+            routeLayersRef.current.push(
+              L.polyline([
+                [parseFloat(from.latitude), parseFloat(from.longitude)],
+                [parseFloat(to.latitude), parseFloat(to.longitude)],
+              ], { color: dayColor, weight: 3, opacity: 0.7, dashArray: '6,6' }).addTo(map)
+            );
+          }
+        }
       }
-    });
+    }
 
     if (allLatLngs.length > 0) {
       map.fitBounds(L.latLngBounds(allLatLngs), { padding: [50, 50] });
@@ -861,12 +1011,14 @@ const AutoGenerator = () => {
                           </div>
                         </div>
 
+                        {/* Reorder / Actions with Auto Recalculate */}
                         <div style={{ display: 'flex', gap: '4px' }}>
                           <button
                             className="btn btn-outline"
                             style={{ padding: '2px 6px', fontSize: '11px' }}
                             onClick={() => handleMoveStop(dIdx, sIdx, -1)}
                             disabled={sIdx === 0}
+                            title="Move up (recalculates times)"
                           >
                             <ArrowUp size={12} />
                           </button>
@@ -875,6 +1027,7 @@ const AutoGenerator = () => {
                             style={{ padding: '2px 6px', fontSize: '11px' }}
                             onClick={() => handleMoveStop(dIdx, sIdx, 1)}
                             disabled={sIdx === day.stops.length - 1}
+                            title="Move down (recalculates times)"
                           >
                             <ArrowDown size={12} />
                           </button>
@@ -882,6 +1035,7 @@ const AutoGenerator = () => {
                             className="btn btn-outline"
                             style={{ padding: '2px 6px', fontSize: '11px', color: '#ff4d4f', borderColor: 'rgba(255,77,79,0.3)' }}
                             onClick={() => handleRemoveStop(dIdx, sIdx)}
+                            title="Remove stop (recalculates times)"
                           >
                             <Trash2 size={12} />
                           </button>
@@ -898,9 +1052,28 @@ const AutoGenerator = () => {
                 ))}
               </div>
 
+              {/* Add Location dropdown for Day */}
+              <div style={{ marginTop: '0.5rem', paddingLeft: '2.5rem' }}>
+                <select
+                  className="form-control"
+                  style={{ maxWidth: '280px', fontSize: '12px', background: 'rgba(255,255,255,0.05)', borderColor: 'var(--glass-border)' }}
+                  onChange={(e) => {
+                    if (e.target.value) {
+                      handleAddStopToDay(dIdx, e.target.value);
+                      e.target.value = '';
+                    }
+                  }}
+                >
+                  <option value="">+ Add location to Day {day.dayNumber}...</option>
+                  {locations.map(loc => (
+                    <option key={loc.id} value={loc.id}>{loc.name} ({loc.district})</option>
+                  ))}
+                </select>
+              </div>
+
               {day.recommendedStay && (
                 <div style={{
-                  marginTop: '1rem', padding: '1rem', background: 'rgba(0,212,170,0.06)',
+                  marginTop: '1.5rem', padding: '1rem', background: 'rgba(0,212,170,0.06)',
                   border: '1px solid rgba(0,212,170,0.25)', borderRadius: '10px',
                   display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '1rem'
                 }}>

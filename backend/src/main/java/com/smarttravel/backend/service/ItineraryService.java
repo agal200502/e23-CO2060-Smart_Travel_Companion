@@ -7,6 +7,8 @@ import com.smarttravel.backend.exception.ResourceNotFoundException;
 import com.smarttravel.backend.model.*;
 import com.smarttravel.backend.repository.ItineraryRepository;
 import com.smarttravel.backend.repository.UserRepository;
+import com.smarttravel.backend.repository.LocationRepository;
+import com.smarttravel.backend.repository.AccommodationRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
