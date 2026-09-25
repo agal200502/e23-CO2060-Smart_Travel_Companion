@@ -29,6 +29,9 @@ public class Location {
     private Double latitude;
     private Double longitude;
 
+    @Column(name = "visit_duration")
+    private Integer visitDuration = 60;
+
     @Column(name = "created_at", insertable = false, updatable = false)
     private Timestamp createdAt;
 
@@ -107,5 +110,21 @@ public class Location {
 
     public void setCreatedAt(Timestamp createdAt) {
         this.createdAt = createdAt;
+    }
+
+    public Integer getVisitDuration() {
+        return visitDuration != null ? visitDuration : 60;
+    }
+
+    public void setVisitDuration(Integer visitDuration) {
+        this.visitDuration = visitDuration != null ? visitDuration : 60;
+    }
+
+    public Integer getVisitingTime() {
+        return getVisitDuration();
+    }
+
+    public void setVisitingTime(Integer visitingTime) {
+        setVisitDuration(visitingTime);
     }
 }

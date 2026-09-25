@@ -16,7 +16,7 @@ const AdminDashboard = () => {
   const [editingUserId, setEditingUserId] = useState(null);
   const [editingUser, setEditingUser] = useState(null);
 
-  const [newLocation, setNewLocation] = useState({ name: '', description: '', district: '', category: '', imageUrl: '', latitude: 0, longitude: 0 });
+  const [newLocation, setNewLocation] = useState({ name: '', description: '', district: '', category: '', imageUrl: '', latitude: 0, longitude: 0, visitDuration: 60 });
 
   // ✅ NEW: state for adding new accommodation
   const [newAccommodation, setNewAccommodation] = useState({ name: '', price: '', rating: '', imageUrl: '', locationId: '' });
@@ -196,7 +196,7 @@ const AdminDashboard = () => {
     e.preventDefault();
     try {
       await api.post('/admin/locations', newLocation);
-      setNewLocation({ name: '', description: '', district: '', category: '', imageUrl: '', latitude: 0, longitude: 0 });
+      setNewLocation({ name: '', description: '', district: '', category: '', imageUrl: '', latitude: 0, longitude: 0, visitDuration: 60 });
       fetchData();
       alert("Location added successfully!");
     } catch (err) {
@@ -226,6 +226,7 @@ const AdminDashboard = () => {
                   <th style={{ padding: '0.5rem' }}>Name</th>
                   <th style={{ padding: '0.5rem' }}>District</th>
                   <th style={{ padding: '0.5rem' }}>Category</th>
+                  <th style={{ padding: '0.5rem' }}>Visiting Time</th>
                   <th style={{ padding: '0.5rem' }}>Actions</th>
                 </tr>
               </thead>
@@ -238,6 +239,11 @@ const AdminDashboard = () => {
                     <td style={{ padding: '0.5rem' }}>
                       <span style={{ fontSize: '0.85rem', background: 'rgba(0,212,170,0.15)', color: 'var(--primary)', padding: '0.1rem 0.5rem', borderRadius: '12px' }}>
                         {loc.category || 'N/A'}
+                      </span>
+                    </td>
+                    <td style={{ padding: '0.5rem' }}>
+                      <span style={{ fontSize: '0.85rem', background: 'rgba(124,109,250,0.15)', color: '#7c6dfa', padding: '0.1rem 0.5rem', borderRadius: '12px', fontWeight: '600' }}>
+                        ⏱️ {loc.visitDuration || loc.visitingTime || 60} mins
                       </span>
                     </td>
                     <td style={{ padding: '0.5rem' }}>
@@ -260,6 +266,10 @@ const AdminDashboard = () => {
                   <textarea className="form-control" placeholder="Description" value={editingLocation.description} onChange={e => setEditingLocation({ ...editingLocation, description: e.target.value })} required style={{ gridColumn: 'span 2' }} />
                   <input className="form-control" type="number" step="0.0001" placeholder="Latitude" value={editingLocation.latitude} onChange={e => setEditingLocation({ ...editingLocation, latitude: parseFloat(e.target.value) })} required />
                   <input className="form-control" type="number" step="0.0001" placeholder="Longitude" value={editingLocation.longitude} onChange={e => setEditingLocation({ ...editingLocation, longitude: parseFloat(e.target.value) })} required />
+                  <div style={{ gridColumn: 'span 2' }}>
+                    <label style={{ display: 'block', fontSize: '12px', color: 'var(--text-muted)', marginBottom: '4px' }}>Visiting Time (minutes for auto-generator timeline)</label>
+                    <input className="form-control" type="number" min="15" step="15" placeholder="Visiting Time (mins)" value={editingLocation.visitDuration ?? editingLocation.visitingTime ?? 60} onChange={e => setEditingLocation({ ...editingLocation, visitDuration: parseInt(e.target.value) || 60, visitingTime: parseInt(e.target.value) || 60 })} required />
+                  </div>
                   <button type="button" className="btn btn-primary" style={{ gridColumn: 'span 1' }} onClick={saveLocation}><Edit2 className="icon-inline"/> Save</button>
                   <button type="button" className="btn btn-outline" style={{ gridColumn: 'span 1' }} onClick={cancelEditLocation}>Cancel</button>
                 </div>
@@ -275,6 +285,10 @@ const AdminDashboard = () => {
               <textarea className="form-control" placeholder="Description" value={newLocation.description} onChange={e => setNewLocation({...newLocation, description: e.target.value})} required style={{ gridColumn: 'span 2' }} />
               <input className="form-control" type="number" step="0.0001" placeholder="Latitude" value={newLocation.latitude} onChange={e => setNewLocation({...newLocation, latitude: parseFloat(e.target.value)})} required />
               <input className="form-control" type="number" step="0.0001" placeholder="Longitude" value={newLocation.longitude} onChange={e => setNewLocation({...newLocation, longitude: parseFloat(e.target.value)})} required />
+              <div style={{ gridColumn: 'span 2' }}>
+                <label style={{ display: 'block', fontSize: '12px', color: 'var(--text-muted)', marginBottom: '4px' }}>Visiting Time (minutes for auto-generator timeline)</label>
+                <input className="form-control" type="number" min="15" step="15" placeholder="Visiting Time (mins)" value={newLocation.visitDuration || 60} onChange={e => setNewLocation({...newLocation, visitDuration: parseInt(e.target.value) || 60, visitingTime: parseInt(e.target.value) || 60})} required />
+              </div>
               <button type="submit" className="btn btn-primary" style={{ gridColumn: 'span 2' }}><Plus className="icon-inline"/> Add Location</button>
             </form>
           </div>

@@ -212,7 +212,7 @@ const AutoGenerator = () => {
     if (!itineraryObj || !itineraryObj.days) return itineraryObj;
 
     const paceVal = itineraryObj.pace || 'MODERATE';
-    const visitDuration = paceVal === 'RELAXED' ? 90 : paceVal === 'PACKED' ? 45 : 60;
+    const defaultVisitDuration = paceVal === 'RELAXED' ? 90 : paceVal === 'PACKED' ? 45 : 60;
     let grandTotalDist = 0;
     let grandTotalDrive = 0;
 
@@ -235,9 +235,11 @@ const AutoGenerator = () => {
         let driveKm = 0;
         let driveMins = 0;
 
-        if (prevLoc && currentLoc && prevLoc.id !== currentLoc.id && prevLoc.latitude && currentLoc.latitude) {
-          driveKm = Math.round(haversine(prevLoc.latitude, prevLoc.longitude, currentLoc.latitude, currentLoc.longitude) * 1.2 * 10) / 10;
-          driveMins = Math.max(5, Math.round((driveKm / 45) * 60));
+        if (prevLoc && currentLoc && prevLoc.latitude && currentLoc.latitude) {
+          if (String(prevLoc.id) !== String(currentLoc.id)) {
+            driveKm = Math.round(haversine(prevLoc.latitude, prevLoc.longitude, currentLoc.latitude, currentLoc.longitude) * 1.2 * 10) / 10;
+            driveMins = Math.max(5, Math.round((driveKm / 45) * 60));
+          }
         }
 
         currentMins += driveMins;
@@ -253,6 +255,9 @@ const AutoGenerator = () => {
         const arrH = Math.floor(currentMins / 60) % 24;
         const arrM = currentMins % 60;
         const arrivalStr = `${arrH.toString().padStart(2, '0')}:${arrM.toString().padStart(2, '0')}`;
+
+        // Strictly use visiting time defined by Admin for this location (or default pace duration)
+        const visitDuration = currentLoc?.visitDuration || currentLoc?.visitingTime || defaultVisitDuration;
 
         currentMins += visitDuration;
 
@@ -410,7 +415,7 @@ const AutoGenerator = () => {
         }
 
         const arr = `${Math.floor(timeMins / 60).toString().padStart(2, '0')}:${(timeMins % 60).toString().padStart(2, '0')}`;
-        const visitDur = 60;
+        const visitDur = loc.visitDuration || loc.visitingTime || 60;
         timeMins += visitDur;
         const dep = `${Math.floor(timeMins / 60).toString().padStart(2, '0')}:${(timeMins % 60).toString().padStart(2, '0')}`;
 
@@ -593,7 +598,7 @@ const AutoGenerator = () => {
     const newStop = {
       location: loc,
       stopOrder: (day.stops?.length || 0) + 1,
-      visitDuration: 60,
+      visitDuration: loc.visitDuration || loc.visitingTime || 60,
       travelDistance: 0,
       travelDuration: 0
     };
@@ -602,6 +607,63 @@ const AutoGenerator = () => {
     updatedDays[dayIndex] = day;
 
     const updated = recalculateSchedule({ ...currentItinerary, days: updatedDays });
+    setCurrentItinerary(updated);
+    localStorage.setItem('smartTravelDraftItinerary', JSON.stringify(updated));
+  };
+
+  const handleUpdateStopDuration = (dayIndex, stopIndex, newDurationMins) => {
+    if (!currentItinerary) return;
+    const duration = parseInt(newDurationMins, 10);
+    if (isNaN(duration) || duration <= 0) return;
+
+    const updatedDays = [...currentItinerary.days];
+    const day = { ...updatedDays[dayIndex] };
+    const stops = [...day.stops];
+    stops[stopIndex] = { ...stops[stopIndex], visitDuration: duration };
+    day.stops = stops;
+    updatedDays[dayIndex] = day;
+
+    const updated = recalculateSchedule({ ...currentItinerary, days: updatedDays });
+    setCurrentItinerary(updated);
+    localStorage.setItem('smartTravelDraftItinerary', JSON.stringify(updated));
+  };
+
+  const handleMoveStopToDay = (currentDayIndex, stopIndex, targetDayIndex) => {
+    if (!currentItinerary || targetDayIndex < 0 || targetDayIndex >= currentItinerary.days.length) return;
+    const updatedDays = [...currentItinerary.days];
+    const sourceDay = { ...updatedDays[currentDayIndex] };
+    const targetDay = { ...updatedDays[targetDayIndex] };
+
+    const stopsSource = [...sourceDay.stops];
+    const stopsTarget = [...(targetDay.stops || [])];
+
+    const [movedStop] = stopsSource.splice(stopIndex, 1);
+    stopsTarget.push(movedStop);
+
+    sourceDay.stops = stopsSource;
+    targetDay.stops = stopsTarget;
+
+    updatedDays[currentDayIndex] = sourceDay;
+    updatedDays[targetDayIndex] = targetDay;
+
+    const updated = recalculateSchedule({ ...currentItinerary, days: updatedDays });
+    setCurrentItinerary(updated);
+    localStorage.setItem('smartTravelDraftItinerary', JSON.stringify(updated));
+  };
+
+  const handleUpdateStartLocation = (locationId) => {
+    if (!currentItinerary || !locationId) return;
+    const loc = locations.find(l => l.id.toString() === locationId.toString());
+    if (!loc) return;
+
+    const updated = recalculateSchedule({ ...currentItinerary, startLocation: loc });
+    setCurrentItinerary(updated);
+    localStorage.setItem('smartTravelDraftItinerary', JSON.stringify(updated));
+  };
+
+  const handleUpdateDailyStartTime = (newTimeStr) => {
+    if (!currentItinerary || !newTimeStr) return;
+    const updated = recalculateSchedule({ ...currentItinerary, dailyStartTime: newTimeStr });
     setCurrentItinerary(updated);
     localStorage.setItem('smartTravelDraftItinerary', JSON.stringify(updated));
   };
@@ -1150,11 +1212,39 @@ const AutoGenerator = () => {
       {/* ── 2. Timeline View Tab ── */}
       {activeTab === 'timeline' && currentItinerary && (
         <div className="glass p-4" style={{ borderRadius: 'var(--radius)' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem', marginBottom: '1.5rem' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '1rem', marginBottom: '1.5rem', paddingBottom: '1rem', borderBottom: '1px solid var(--glass-border)' }}>
             <div>
               <h3 style={{ margin: 0, color: 'var(--primary)' }}>{currentItinerary.title}</h3>
               <div style={{ fontSize: '13px', color: 'var(--text-muted)', marginTop: '4px' }}>
                 {currentItinerary.numberOfDays} Days • Total Distance: {currentItinerary.totalDistance} km • Total Driving: {formatDuration(currentItinerary.totalDriveMinutes)}
+              </div>
+
+              {/* Dynamic Start Location & Daily Start Time controls */}
+              <div style={{ display: 'flex', gap: '1.25rem', alignItems: 'center', marginTop: '12px', flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <label style={{ fontSize: '12px', color: 'var(--text-muted)', fontWeight: '600' }}>📍 Start Location:</label>
+                  <select
+                    className="form-control"
+                    style={{ width: 'auto', fontSize: '12px', padding: '4px 8px', background: 'rgba(255,255,255,0.05)', borderColor: 'var(--glass-border)' }}
+                    value={currentItinerary.startLocation?.id || ''}
+                    onChange={(e) => handleUpdateStartLocation(e.target.value)}
+                  >
+                    {locations.map(loc => (
+                      <option key={loc.id} value={loc.id}>{loc.name} ({loc.district})</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <label style={{ fontSize: '12px', color: 'var(--text-muted)', fontWeight: '600' }}>⏰ Daily Start Time:</label>
+                  <input
+                    type="time"
+                    className="form-control"
+                    style={{ width: 'auto', fontSize: '12px', padding: '4px 8px', background: 'rgba(255,255,255,0.05)', borderColor: 'var(--glass-border)' }}
+                    value={currentItinerary.dailyStartTime || '08:30'}
+                    onChange={(e) => handleUpdateDailyStartTime(e.target.value)}
+                  />
+                </div>
               </div>
             </div>
 
@@ -1207,9 +1297,12 @@ const AutoGenerator = () => {
 
                     <div style={{ background: 'rgba(255,255,255,0.03)', padding: '1rem', borderRadius: '8px', border: '1px solid var(--glass-border)' }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                        <div>
-                          <div style={{ fontSize: '12px', color: '#00d4aa', fontWeight: 'bold' }}>
-                            {stop.arrivalTime || '08:30'} – {stop.departureTime || '09:30'} ({stop.visitDuration || 60} min visit)
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: '13px', color: '#00d4aa', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                            <span>⏱️ {stop.arrivalTime || '08:30'} – {stop.departureTime || '09:30'}</span>
+                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', background: 'rgba(0,212,170,0.12)', padding: '3px 10px', borderRadius: '12px', color: '#00d4aa', fontSize: '11px', fontWeight: '600' }}>
+                              Visit: {stop.location?.visitDuration || stop.location?.visitingTime || stop.visitDuration || 60} min
+                            </span>
                           </div>
                           <h5 style={{ margin: '4px 0', fontSize: '16px', color: 'var(--text-light)' }}>
                             {stop.location?.name}
@@ -1220,13 +1313,13 @@ const AutoGenerator = () => {
                         </div>
 
                         {/* Reorder / Actions with Auto Recalculate */}
-                        <div style={{ display: 'flex', gap: '4px' }}>
+                        <div style={{ display: 'flex', gap: '4px', alignItems: 'center', flexWrap: 'wrap' }}>
                           <button
                             className="btn btn-outline"
                             style={{ padding: '2px 6px', fontSize: '11px' }}
                             onClick={() => handleMoveStop(dIdx, sIdx, -1)}
                             disabled={sIdx === 0}
-                            title="Move up (recalculates times)"
+                            title="Move up (recalculates arrival & departure times)"
                           >
                             <ArrowUp size={12} />
                           </button>
@@ -1235,10 +1328,32 @@ const AutoGenerator = () => {
                             style={{ padding: '2px 6px', fontSize: '11px' }}
                             onClick={() => handleMoveStop(dIdx, sIdx, 1)}
                             disabled={sIdx === day.stops.length - 1}
-                            title="Move down (recalculates times)"
+                            title="Move down (recalculates arrival & departure times)"
                           >
                             <ArrowDown size={12} />
                           </button>
+                          {currentItinerary.days.length > 1 && (
+                            <select
+                              className="form-control"
+                              style={{ padding: '2px 4px', fontSize: '11px', height: '24px', width: 'auto', background: 'rgba(255,255,255,0.05)', borderColor: 'var(--glass-border)' }}
+                              value=""
+                              onChange={(e) => {
+                                if (e.target.value !== '') {
+                                  handleMoveStopToDay(dIdx, sIdx, parseInt(e.target.value));
+                                }
+                              }}
+                              title="Move this stop to a different day (recalculates timeline)"
+                            >
+                              <option value="">Move Day...</option>
+                              {currentItinerary.days.map((d, targetIdx) => (
+                                targetIdx !== dIdx && (
+                                  <option key={targetIdx} value={targetIdx}>
+                                    To Day {d.dayNumber}
+                                  </option>
+                                )
+                              ))}
+                            </select>
+                          )}
                           <button
                             className="btn btn-outline"
                             style={{ padding: '2px 6px', fontSize: '11px', color: '#ff4d4f', borderColor: 'rgba(255,77,79,0.3)' }}

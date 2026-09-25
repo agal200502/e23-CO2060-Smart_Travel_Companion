@@ -48,6 +48,9 @@ public class AdminController {
     // --- Locations ---
     @PostMapping("/locations")
     public Location createLocation(@RequestBody Location location) {
+        if (location.getVisitDuration() == null) {
+            location.setVisitDuration(60);
+        }
         return locationRepository.save(location);
     }
 
@@ -64,6 +67,7 @@ public class AdminController {
         location.setImageUrl(locationDetails.getImageUrl());
         location.setLatitude(locationDetails.getLatitude());
         location.setLongitude(locationDetails.getLongitude());
+        location.setVisitDuration(locationDetails.getVisitDuration() != null ? locationDetails.getVisitDuration() : 60);
         return ResponseEntity.ok(locationRepository.save(location));
     }
 
