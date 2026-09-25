@@ -46,6 +46,7 @@ CREATE TABLE IF NOT EXISTS itineraries (
     daily_start_time VARCHAR(20) DEFAULT '08:30',
     total_distance DOUBLE DEFAULT 0.0,
     total_drive_minutes INT DEFAULT 0,
+    interests VARCHAR(500),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,

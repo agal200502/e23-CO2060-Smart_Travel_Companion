@@ -10,7 +10,7 @@ import {
 import { AuthContext } from '../context/AuthContext';
 import {
   Sparkles, Calendar, Trash2, MapPin, Map, Navigation, Route,
-  Clock, DollarSign, Heart, CheckSquare, Square, Hotel, Download,
+  Clock, DollarSign, Heart, CheckSquare, Square, Hotel,
   Printer, Bookmark, Edit3, ArrowRight, ArrowUp, ArrowDown, Plus, AlertCircle
 } from 'lucide-react';
 
@@ -42,6 +42,33 @@ const haversine = (lat1, lon1, lat2, lon2) => {
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 };
 
+const matchLocationToInterests = (loc, selectedInterests) => {
+  if (!selectedInterests || selectedInterests.length === 0) return false;
+  if (!loc || !loc.category) return false;
+
+  const locCatRaw = String(loc.category).toUpperCase();
+  const locCatTags = locCatRaw.split(/[,;/|\s]+/).filter(Boolean);
+
+  for (const interestId of selectedInterests) {
+    const opt = INTEREST_OPTIONS.find(o => o.id === interestId || o.label.toUpperCase() === interestId.toUpperCase());
+    const searchTerms = [interestId.toUpperCase()];
+    if (opt) {
+      searchTerms.push(opt.label.toUpperCase());
+      opt.label.split(/[\s&/]+/).forEach(word => {
+        if (word.length > 2) searchTerms.push(word.toUpperCase());
+      });
+    }
+
+    for (const term of searchTerms) {
+      if (locCatRaw.includes(term)) return true;
+      for (const tag of locCatTags) {
+        if (tag.includes(term) || term.includes(tag)) return true;
+      }
+    }
+  }
+  return false;
+};
+
 const AutoGenerator = () => {
   const { user } = useContext(AuthContext);
 
@@ -70,6 +97,7 @@ const AutoGenerator = () => {
   const [savedTrips, setSavedTrips] = useState([]);
   const [loadingSaved, setLoadingSaved] = useState(false);
 
+
   // Map state
   const mapRef = useRef(null);
   const mapInstanceRef = useRef(null);
@@ -84,7 +112,24 @@ const AutoGenerator = () => {
     const localDraft = localStorage.getItem('smartTravelDraftItinerary');
     if (localDraft) {
       try {
-        setCurrentItinerary(JSON.parse(localDraft));
+        const parsed = JSON.parse(localDraft);
+        setCurrentItinerary(parsed);
+
+        const pendingSave = localStorage.getItem('smartTravelPendingSave');
+        const token = localStorage.getItem('token');
+        if (pendingSave === 'true' && token && parsed) {
+          localStorage.removeItem('smartTravelPendingSave');
+          saveItinerary(parsed)
+            .then((saved) => {
+              setCurrentItinerary(saved);
+              localStorage.setItem('smartTravelDraftItinerary', JSON.stringify(saved));
+              setSaveSuccessMsg('Itinerary saved successfully to your account!');
+              loadSavedItineraries();
+            })
+            .catch((err) => {
+              console.error('Pending save failed:', err);
+            });
+        }
       } catch (e) {
         console.error('Failed to parse local draft:', e);
       }
@@ -129,16 +174,36 @@ const AutoGenerator = () => {
 
   const loadSavedItineraries = async () => {
     setLoadingSaved(true);
+    let localList = [];
     try {
-      const data = await getSavedItineraries();
-      if (Array.isArray(data)) {
-        setSavedTrips(data);
+      const localStr = localStorage.getItem('smartTravelSavedTrips');
+      if (localStr) localList = JSON.parse(localStr);
+    } catch (e) {
+      console.error('Failed to parse local saved trips:', e);
+    }
+
+    try {
+      const token = localStorage.getItem('token');
+      if (token) {
+        const data = await getSavedItineraries();
+        if (Array.isArray(data)) {
+          const combined = [...data];
+          for (const item of localList) {
+            if (!combined.some(c => String(c.id) === String(item.id))) {
+              combined.push(item);
+            }
+          }
+          setSavedTrips(combined);
+          return;
+        }
       }
     } catch (err) {
-      console.error('Failed to fetch saved itineraries:', err);
+      console.error('Failed to fetch saved itineraries from backend:', err);
     } finally {
       setLoadingSaved(false);
     }
+
+    setSavedTrips(localList);
   };
 
   // ── Schedule Recalculation Engine ──────────────────────────────────────
@@ -288,7 +353,19 @@ const AutoGenerator = () => {
 
   const buildClientSideItinerary = (payload) => {
     const startLoc = locations.find(l => l.id.toString() === payload.startLocationId.toString()) || locations[0];
-    const candidatePool = locations.filter(l => l.id !== startLoc.id);
+    const mustVisitSet = new Set((payload.mustVisitLocationIds || []).map(id => id.toString()));
+    const userInterests = payload.interests || [];
+
+    let candidatePool = [];
+    if (mustVisitSet.size > 0) {
+      // ONLY include specifically selected places from Step 4
+      candidatePool = locations.filter(l => l.id.toString() !== startLoc.id.toString() && mustVisitSet.has(l.id.toString()));
+    } else if (userInterests.length > 0) {
+      // ONLY include interest-matching places from Step 3
+      candidatePool = locations.filter(l => l.id.toString() !== startLoc.id.toString() && matchLocationToInterests(l, userInterests));
+    } else {
+      candidatePool = locations.filter(l => l.id.toString() !== startLoc.id.toString());
+    }
 
     const sorted = [...candidatePool].sort((a, b) =>
       haversine(startLoc.latitude, startLoc.longitude, a.latitude, a.longitude) -
@@ -297,15 +374,23 @@ const AutoGenerator = () => {
 
     const dayCount = payload.days;
     const daysData = [];
+    const totalCandidates = sorted.length;
     let idx = 0;
 
     for (let d = 1; d <= dayCount; d++) {
       const dayStops = [];
       if (d === 1) dayStops.push(startLoc);
 
-      const countForDay = Math.min(3, sorted.length - idx);
+      const remainingDays = dayCount - d + 1;
+      const countForDay = totalCandidates > 0 ? Math.max(1, Math.ceil((totalCandidates - idx) / remainingDays)) : 0;
+
       for (let s = 0; s < countForDay; s++) {
         if (sorted[idx]) dayStops.push(sorted[idx++]);
+      }
+
+      if (dayStops.length === 0) {
+        const lastLoc = daysData[d - 2]?.stops?.slice(-1)[0]?.location || startLoc;
+        dayStops.push(lastLoc);
       }
 
       let timeMins = 8 * 60 + 30; // 08:30
@@ -363,6 +448,7 @@ const AutoGenerator = () => {
       pace: payload.pace,
       budgetTier: payload.budgetTier,
       dailyStartTime: payload.dailyStartTime,
+      interests: payload.interests,
       totalDistance: Math.round(daysData.reduce((acc, d) => acc + d.totalDistance, 0) * 10) / 10,
       totalDriveMinutes: daysData.reduce((acc, d) => acc + d.totalDriveMinutes, 0),
       days: daysData
@@ -377,59 +463,85 @@ const AutoGenerator = () => {
     setErrorMsg(null);
     setSaveSuccessMsg(null);
 
-    const token = localStorage.getItem('token');
-    if (!token) {
-      setErrorMsg('You are not logged in. Please log in to save itineraries to your account.');
-      setSaving(false);
-      return;
-    }
+    const itineraryToSave = {
+      ...currentItinerary,
+      id: currentItinerary.id || ('local_' + Date.now()),
+      createdAt: currentItinerary.createdAt || new Date().toISOString()
+    };
 
+    setCurrentItinerary(itineraryToSave);
+    localStorage.setItem('smartTravelDraftItinerary', JSON.stringify(itineraryToSave));
+
+    // Save locally right away
+    let localList = [];
     try {
-      let saved;
-      if (currentItinerary.id) {
-        saved = await updateItinerary(currentItinerary.id, currentItinerary);
-      } else {
-        saved = await saveItinerary(currentItinerary);
-      }
-      setCurrentItinerary(saved);
-      localStorage.setItem('smartTravelDraftItinerary', JSON.stringify(saved));
-      setSaveSuccessMsg('Itinerary saved successfully to your account!');
+      const localStr = localStorage.getItem('smartTravelSavedTrips');
+      if (localStr) localList = JSON.parse(localStr);
+    } catch (e) {}
 
-      // Update savedTrips state immediately in frontend
-      try {
-        const refreshedList = await getSavedItineraries();
-        if (Array.isArray(refreshedList) && refreshedList.length > 0) {
-          setSavedTrips(refreshedList);
-        } else if (saved) {
-          setSavedTrips(prev => [saved, ...prev.filter(t => t.id !== saved.id)]);
-        }
-      } catch (e) {
-        if (saved) setSavedTrips(prev => [saved, ...prev.filter(t => t.id !== saved.id)]);
-      }
-    } catch (err) {
-      console.error('Failed to save itinerary:', err);
-      if (err.response?.status === 401) {
-        setErrorMsg('Your login session has expired. Please log in again to save your itinerary.');
-      } else {
-        setErrorMsg(err.response?.data?.message || err.response?.data || 'Failed to save itinerary. Please try again.');
-      }
-    } finally {
-      setSaving(false);
+    const existingIndex = localList.findIndex(t => String(t.id) === String(itineraryToSave.id));
+    if (existingIndex >= 0) {
+      localList[existingIndex] = itineraryToSave;
+    } else {
+      localList.unshift(itineraryToSave);
     }
+
+    localStorage.setItem('smartTravelSavedTrips', JSON.stringify(localList));
+    setSavedTrips(prev => {
+      const filtered = prev.filter(t => String(t.id) !== String(itineraryToSave.id));
+      return [itineraryToSave, ...filtered];
+    });
+
+    setSaveSuccessMsg('Itinerary saved successfully!');
+
+    // Attempt background sync if authenticated
+    const token = localStorage.getItem('token');
+    if (token) {
+      try {
+        let savedBackend;
+        if (typeof itineraryToSave.id === 'number') {
+          savedBackend = await updateItinerary(itineraryToSave.id, itineraryToSave);
+        } else {
+          savedBackend = await saveItinerary(itineraryToSave);
+        }
+        if (savedBackend && savedBackend.id) {
+          setCurrentItinerary(savedBackend);
+          localStorage.setItem('smartTravelDraftItinerary', JSON.stringify(savedBackend));
+          setSavedTrips(prev => prev.map(t => String(t.id) === String(itineraryToSave.id) ? savedBackend : t));
+          const updatedLocal = localList.map(t => String(t.id) === String(itineraryToSave.id) ? savedBackend : t);
+          localStorage.setItem('smartTravelSavedTrips', JSON.stringify(updatedLocal));
+        }
+      } catch (err) {
+        console.warn('Backend sync failed, saved locally:', err);
+      }
+    }
+
+    setSaving(false);
   };
 
   const handleDeleteSavedTrip = async (tripId) => {
     if (!window.confirm('Are you sure you want to delete this saved itinerary?')) return;
+    setSavedTrips(prev => prev.filter(t => String(t.id) !== String(tripId)));
     try {
-      await deleteItinerary(tripId);
-      setSavedTrips(prev => prev.filter(t => t.id !== tripId));
-      if (currentItinerary?.id === tripId) {
-        setCurrentItinerary(null);
-        localStorage.removeItem('smartTravelDraftItinerary');
+      const localStr = localStorage.getItem('smartTravelSavedTrips');
+      if (localStr) {
+        const localList = JSON.parse(localStr);
+        const updated = localList.filter(t => String(t.id) !== String(tripId));
+        localStorage.setItem('smartTravelSavedTrips', JSON.stringify(updated));
       }
-    } catch (err) {
-      console.error('Failed to delete itinerary:', err);
-      alert('Failed to delete itinerary.');
+    } catch (e) {}
+
+    if (currentItinerary && String(currentItinerary.id) === String(tripId)) {
+      setCurrentItinerary(null);
+      localStorage.removeItem('smartTravelDraftItinerary');
+    }
+
+    if (typeof tripId === 'number') {
+      try {
+        await deleteItinerary(tripId);
+      } catch (err) {
+        console.warn('Backend delete error:', err);
+      }
     }
   };
 
@@ -525,17 +637,20 @@ const AutoGenerator = () => {
     map.invalidateSize();
     const allLatLngs = [];
 
-    for (let dIdx = 0; dIdx < (currentItinerary.days || []).length; dIdx++) {
-      const day = currentItinerary.days[dIdx];
+    const days = currentItinerary.days || [];
+    let globalStopNumber = 1;
+
+    for (let dIdx = 0; dIdx < days.length; dIdx++) {
+      const day = days[dIdx];
       const dayColor = DAY_COLORS[dIdx % DAY_COLORS.length];
       const validStops = (day.stops || []).filter(s => s.location && s.location.latitude && s.location.longitude);
-      const dayLatLngs = [];
 
       validStops.forEach((stop, sIdx) => {
         const lat = parseFloat(stop.location.latitude);
         const lng = parseFloat(stop.location.longitude);
-        dayLatLngs.push([lat, lng]);
         allLatLngs.push([lat, lng]);
+
+        const currentStopNum = globalStopNumber++;
 
         const icon = L.divIcon({
           className: '',
@@ -545,7 +660,7 @@ const AutoGenerator = () => {
             display:flex;align-items:center;justify-content:center;
             font-weight:bold;font-size:13px;
             border:3px solid white;box-shadow:0 3px 10px rgba(0,0,0,0.4);
-          ">D${day.dayNumber}-${sIdx + 1}</div>`,
+          ">${currentStopNum}</div>`,
           iconSize: [34, 34], iconAnchor: [17, 17], popupAnchor: [0, -20],
         });
 
@@ -553,10 +668,10 @@ const AutoGenerator = () => {
           .bindPopup(`
             <div style="font-family:sans-serif;min-width:180px;">
               <div style="font-size:11px;color:${dayColor};font-weight:bold;text-transform:uppercase;">
-                Day ${day.dayNumber} — Stop ${sIdx + 1}
+                Day ${day.dayNumber} — Stop ${sIdx + 1} (Overall #${currentStopNum})
               </div>
               <div style="font-weight:bold;font-size:15px;margin:3px 0;">${stop.location.name}</div>
-              <div style="color:#666;font-size:12px;">📍 ${stop.location.district || ''}</div>
+              <div style="color:#666;font-size:12px;">📍 ${stop.location.district || ''} ${stop.location.category ? `• ${stop.location.category}` : ''}</div>
               <hr style="margin:6px 0;border:0;border-top:1px solid #eee;"/>
               <div style="font-size:12px;color:#333;">
                 ⏱️ <b>${stop.arrivalTime || '08:30'}</b> - <b>${stop.departureTime || '09:30'}</b> (${stop.visitDuration || 60}m visit)
@@ -570,6 +685,10 @@ const AutoGenerator = () => {
       if (day.recommendedStay && day.recommendedStay.location) {
         const stayLoc = day.recommendedStay.location;
         if (stayLoc.latitude && stayLoc.longitude) {
+          const stayLat = parseFloat(stayLoc.latitude);
+          const stayLng = parseFloat(stayLoc.longitude);
+          allLatLngs.push([stayLat, stayLng]);
+
           const stayIcon = L.divIcon({
             className: '',
             html: `<div style="
@@ -581,7 +700,7 @@ const AutoGenerator = () => {
             iconSize: [32, 32], iconAnchor: [16, 16], popupAnchor: [0, -18],
           });
 
-          const stayMarker = L.marker([parseFloat(stayLoc.latitude), parseFloat(stayLoc.longitude)], { icon: stayIcon }).addTo(map)
+          const stayMarker = L.marker([stayLat, stayLng], { icon: stayIcon }).addTo(map)
             .bindPopup(`
               <div style="font-family:sans-serif;">
                 <div style="font-size:11px;color:#00d4aa;font-weight:bold;">Recommended Stay — Day ${day.dayNumber}</div>
@@ -598,36 +717,21 @@ const AutoGenerator = () => {
         for (let i = 0; i < validStops.length - 1; i++) {
           const from = validStops[i].location;
           const to = validStops[i + 1].location;
-          try {
-            const url = `https://router.project-osrm.org/route/v1/driving/` +
-              `${parseFloat(from.longitude)},${parseFloat(from.latitude)};` +
-              `${parseFloat(to.longitude)},${parseFloat(to.latitude)}` +
-              `?overview=full&geometries=geojson`;
+          await drawOsrmRouteSegment(L, map, from, to, dayColor, false);
+        }
+      }
 
-            const res = await fetch(url);
-            const data = await res.json();
+      // Transition route between Day N final stop and Day N+1 first stop (continuous journey)
+      if (dIdx < days.length - 1) {
+        const nextDayStops = (days[dIdx + 1].stops || []).filter(s => s.location && s.location.latitude && s.location.longitude);
+        if (validStops.length > 0 && nextDayStops.length > 0) {
+          const lastLoc = validStops[validStops.length - 1].location;
+          const firstNextLoc = nextDayStops[0].location;
 
-            if (data.code === 'Ok' && data.routes && data.routes.length > 0) {
-              const coords = data.routes[0].geometry.coordinates.map(c => [c[1], c[0]]);
-              routeLayersRef.current.push(
-                L.polyline(coords, { color: '#000', weight: 7, opacity: 0.15 }).addTo(map),
-                L.polyline(coords, { color: dayColor, weight: 4, opacity: 0.9 }).addTo(map)
-              );
-            } else {
-              routeLayersRef.current.push(
-                L.polyline([
-                  [parseFloat(from.latitude), parseFloat(from.longitude)],
-                  [parseFloat(to.latitude), parseFloat(to.longitude)],
-                ], { color: dayColor, weight: 3, opacity: 0.7, dashArray: '6,6' }).addTo(map)
-              );
-            }
-          } catch (err) {
-            routeLayersRef.current.push(
-              L.polyline([
-                [parseFloat(from.latitude), parseFloat(from.longitude)],
-                [parseFloat(to.latitude), parseFloat(to.longitude)],
-              ], { color: dayColor, weight: 3, opacity: 0.7, dashArray: '6,6' }).addTo(map)
-            );
+          // Avoid duplicate OSRM request if same location
+          if (lastLoc.id !== firstNextLoc.id && (lastLoc.latitude !== firstNextLoc.latitude || lastLoc.longitude !== firstNextLoc.longitude)) {
+            const nextDayColor = DAY_COLORS[(dIdx + 1) % DAY_COLORS.length];
+            await drawOsrmRouteSegment(L, map, lastLoc, firstNextLoc, nextDayColor, true);
           }
         }
       }
@@ -638,17 +742,45 @@ const AutoGenerator = () => {
     }
   };
 
-  // ── Export Handlers ───────────────────────────────────────────────────
+  const drawOsrmRouteSegment = async (L, map, fromLoc, toLoc, color, isTransition = false) => {
+    if (!fromLoc || !toLoc || !fromLoc.latitude || !toLoc.latitude) return;
+    try {
+      const url = `https://router.project-osrm.org/route/v1/driving/` +
+        `${parseFloat(fromLoc.longitude)},${parseFloat(fromLoc.latitude)};` +
+        `${parseFloat(toLoc.longitude)},${parseFloat(toLoc.latitude)}` +
+        `?overview=full&geometries=geojson`;
 
-  const handleExportJSON = () => {
-    if (!currentItinerary) return;
-    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(currentItinerary, null, 2));
-    const downloadAnchor = document.createElement('a');
-    downloadAnchor.setAttribute("href", dataStr);
-    downloadAnchor.setAttribute("download", `itinerary-${Date.now()}.json`);
-    document.body.appendChild(downloadAnchor);
-    downloadAnchor.click();
-    downloadAnchor.remove();
+      const res = await fetch(url);
+      const data = await res.json();
+
+      if (data.code === 'Ok' && data.routes && data.routes.length > 0) {
+        const coords = data.routes[0].geometry.coordinates.map(c => [c[1], c[0]]);
+        routeLayersRef.current.push(
+          L.polyline(coords, { color: '#000', weight: isTransition ? 5 : 7, opacity: 0.15 }).addTo(map),
+          L.polyline(coords, {
+            color: color,
+            weight: isTransition ? 3.5 : 4,
+            opacity: 0.9,
+            dashArray: isTransition ? '6,6' : null
+          }).addTo(map)
+        );
+      } else {
+        routeLayersRef.current.push(
+          L.polyline([
+            [parseFloat(fromLoc.latitude), parseFloat(fromLoc.longitude)],
+            [parseFloat(toLoc.latitude), parseFloat(toLoc.longitude)],
+          ], { color: color, weight: 3, opacity: 0.7, dashArray: '6,6' }).addTo(map)
+        );
+      }
+    } catch (err) {
+      console.warn('OSRM segment request failed, falling back to straight line:', err);
+      routeLayersRef.current.push(
+        L.polyline([
+          [parseFloat(fromLoc.latitude), parseFloat(fromLoc.longitude)],
+          [parseFloat(toLoc.latitude), parseFloat(toLoc.longitude)],
+        ], { color: color, weight: 3, opacity: 0.7, dashArray: '6,6' }).addTo(map)
+      );
+    }
   };
 
   const handlePrint = () => {
@@ -710,9 +842,27 @@ const AutoGenerator = () => {
       {errorMsg && (
         <div style={{
           padding: '1rem', background: 'rgba(255,77,79,0.12)', border: '1px solid #ff4d4f',
-          borderRadius: '8px', color: '#ff4d4f', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '8px'
+          borderRadius: '8px', color: '#ff4d4f', marginBottom: '1rem',
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px'
         }}>
-          <AlertCircle size={18} /> {errorMsg}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <AlertCircle size={18} /> {errorMsg}
+          </div>
+          {(errorMsg.toLowerCase().includes('login') || errorMsg.toLowerCase().includes('logged in')) && (
+            <button
+              className="btn btn-primary"
+              style={{ fontSize: '12px', padding: '6px 14px' }}
+              onClick={() => {
+                if (currentItinerary) {
+                  localStorage.setItem('smartTravelDraftItinerary', JSON.stringify(currentItinerary));
+                  localStorage.setItem('smartTravelPendingSave', 'true');
+                }
+                window.location.href = '/login';
+              }}
+            >
+              Log In Now →
+            </button>
+          )}
         </div>
       )}
       {saveSuccessMsg && (
@@ -874,34 +1024,95 @@ const AutoGenerator = () => {
           {/* Step 4: Must-Visit Places */}
           {wizardStep === 4 && (
             <div className="animate-fade-in">
-              <h4 style={{ color: 'var(--text-light)', marginBottom: '1rem' }}>Step 4 — Must-Visit Places (Optional)</h4>
-              <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginBottom: '1.5rem' }}>
-                Select specific destinations that MUST be included in your multi-day schedule.
-              </p>
+              <h4 style={{ color: 'var(--text-light)', marginBottom: '0.5rem' }}>Step 4 — Must-Visit Places</h4>
 
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '10px', marginBottom: '2rem' }}>
-                {locations.map(loc => {
-                  const isMust = mustVisitIds.includes(loc.id);
+              {selectedInterests.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '2.5rem 1.5rem', background: 'rgba(255,255,255,0.02)', borderRadius: '12px', border: '1px solid var(--glass-border)', margin: '1.5rem 0' }}>
+                  <AlertCircle size={40} color="#f5a623" style={{ marginBottom: '0.75rem' }} />
+                  <h5 style={{ color: 'var(--text-light)', marginBottom: '0.5rem' }}>Please select at least one interest to receive recommended locations.</h5>
+                  <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginBottom: '1.25rem' }}>
+                    Step 4 recommendations are matched directly against your chosen travel themes.
+                  </p>
+                  <button className="btn btn-outline" onClick={() => setWizardStep(3)}>
+                    ← Back to Step 3 (Select Interests)
+                  </button>
+                </div>
+              ) : (() => {
+                const recommendedLocations = locations.filter(loc => matchLocationToInterests(loc, selectedInterests));
+
+                if (recommendedLocations.length === 0) {
                   return (
-                    <div
-                      key={loc.id}
-                      onClick={() => toggleMustVisit(loc.id)}
-                      style={{
-                        padding: '10px 14px', borderRadius: '8px', cursor: 'pointer',
-                        border: `1px solid ${isMust ? '#e05c97' : 'var(--glass-border)'}`,
-                        background: isMust ? 'rgba(224,92,151,0.15)' : 'rgba(255,255,255,0.03)',
-                        display: 'flex', alignItems: 'center', gap: '10px', transition: 'all 0.2s'
-                      }}
-                    >
-                      {isMust ? <CheckSquare size={18} color="#e05c97" /> : <Square size={18} color="#666" />}
-                      <div>
-                        <div style={{ fontSize: '13px', fontWeight: '600', color: 'var(--text-light)' }}>{loc.name}</div>
-                        <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{loc.district}</div>
-                      </div>
+                    <div style={{ textAlign: 'center', padding: '2.5rem 1.5rem', background: 'rgba(255,255,255,0.02)', borderRadius: '12px', border: '1px solid var(--glass-border)', margin: '1.5rem 0' }}>
+                      <AlertCircle size={40} color="#7c6dfa" style={{ marginBottom: '0.75rem' }} />
+                      <h5 style={{ color: 'var(--text-light)', marginBottom: '0.5rem' }}>No locations are currently available for the selected interests.</h5>
+                      <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginBottom: '1.25rem' }}>
+                        Please choose another interest or modify your selection in Step 3.
+                      </p>
+                      <button className="btn btn-outline" onClick={() => setWizardStep(3)}>
+                        ← Back to Step 3 (Select Interests)
+                      </button>
                     </div>
                   );
-                })}
-              </div>
+                }
+
+                return (
+                  <div>
+                    <div style={{ marginBottom: '1.5rem', padding: '0.75rem 1rem', background: 'rgba(0,212,170,0.08)', borderRadius: '8px', border: '1px solid rgba(0,212,170,0.2)' }}>
+                      <div style={{ fontSize: '11px', color: '#00d4aa', fontWeight: 'bold', textTransform: 'uppercase', marginBottom: '6px' }}>
+                        Recommended based on your interests:
+                      </div>
+                      <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
+                        {selectedInterests.map(id => {
+                          const opt = INTEREST_OPTIONS.find(o => o.id === id);
+                          return (
+                            <span key={id} style={{ fontSize: '12px', padding: '3px 10px', background: 'rgba(0,212,170,0.15)', borderRadius: '12px', color: '#00d4aa', fontWeight: '600' }}>
+                              {opt ? `${opt.icon} ${opt.label}` : id}
+                            </span>
+                          );
+                        })}
+                      </div>
+                      <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '6px' }}>
+                        Select the places you definitely want to visit during your trip.
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: '12px', marginBottom: '2rem' }}>
+                      {recommendedLocations.map(loc => {
+                        const isMust = mustVisitIds.includes(loc.id);
+                        return (
+                          <div
+                            key={loc.id}
+                            onClick={() => toggleMustVisit(loc.id)}
+                            style={{
+                              padding: '12px', borderRadius: '10px', cursor: 'pointer',
+                              border: `1px solid ${isMust ? '#00d4aa' : 'var(--glass-border)'}`,
+                              background: isMust ? 'rgba(0,212,170,0.15)' : 'rgba(255,255,255,0.03)',
+                              display: 'flex', alignItems: 'center', gap: '12px', transition: 'all 0.2s'
+                            }}
+                          >
+                            {loc.imageUrl ? (
+                              <img src={loc.imageUrl} alt={loc.name} style={{ width: '48px', height: '48px', borderRadius: '8px', objectFit: 'cover' }} />
+                            ) : (
+                              <div style={{ width: '48px', height: '48px', borderRadius: '8px', background: 'rgba(255,255,255,0.05)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                <MapPin size={20} color="#00d4aa" />
+                              </div>
+                            )}
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{ fontSize: '14px', fontWeight: 'bold', color: 'var(--text-light)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                {loc.name}
+                              </div>
+                              <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                                📍 {loc.district} {loc.category ? `• ${loc.category}` : ''}
+                              </div>
+                            </div>
+                            {isMust ? <CheckSquare size={20} color="#00d4aa" /> : <Square size={20} color="#666" />}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
           )}
 
@@ -926,7 +1137,7 @@ const AutoGenerator = () => {
               <button
                 className="btn btn-primary"
                 onClick={handleGenerate}
-                disabled={generating}
+                disabled={generating || selectedInterests.length === 0}
                 style={{ background: 'linear-gradient(135deg, #7c6dfa, #00d4aa)', borderColor: 'transparent', padding: '0.75rem 1.5rem' }}
               >
                 {generating ? '✨ Generating Itinerary...' : '✨ Generate My Itinerary'}
@@ -951,10 +1162,7 @@ const AutoGenerator = () => {
               <button className="btn btn-outline" onClick={handleSaveItinerary} disabled={saving}>
                 <Bookmark size={15} /> {saving ? 'Saving...' : 'Save to Account'}
               </button>
-              <button className="btn btn-outline" onClick={handleExportJSON}>
-                <Download size={15} /> Export JSON
-              </button>
-              <button className="btn btn-outline" onClick={handlePrint}>
+              <button className="btn btn-outline" onClick={() => window.print()}>
                 <Printer size={15} /> Print / PDF
               </button>
             </div>
@@ -1159,7 +1367,7 @@ const AutoGenerator = () => {
               </button>
             </div>
           ) : (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '1.5rem' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: '1.5rem' }}>
               {savedTrips.map(trip => (
                 <div
                   key={trip.id}
@@ -1170,14 +1378,33 @@ const AutoGenerator = () => {
                   }}
                 >
                   <div>
-                    <div style={{ fontSize: '11px', color: '#00d4aa', fontWeight: 'bold', textTransform: 'uppercase' }}>
-                      {trip.numberOfDays} Days • {trip.pace || 'MODERATE'} Pace
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                      <span style={{ fontSize: '11px', color: '#00d4aa', fontWeight: 'bold', textTransform: 'uppercase' }}>
+                        {trip.numberOfDays} Days • {trip.pace || 'MODERATE'} Pace • {trip.budgetTier || 'MEDIUM'} Budget
+                      </span>
+                      {trip.dailyStartTime && (
+                        <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                          ⏰ Starts {trip.dailyStartTime}
+                        </span>
+                      )}
                     </div>
-                    <h4 style={{ margin: '6px 0 10px', color: 'var(--text-light)' }}>{trip.title}</h4>
-                    <div style={{ fontSize: '13px', color: 'var(--text-muted)', marginBottom: '1rem' }}>
+                    <h4 style={{ margin: '0 0 10px', color: 'var(--text-light)', fontSize: '16px' }}>{trip.title}</h4>
+
+                    {trip.interests && trip.interests.length > 0 && (
+                      <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap', marginBottom: '10px' }}>
+                        {trip.interests.map((int, i) => (
+                          <span key={i} style={{ fontSize: '10px', padding: '2px 8px', borderRadius: '10px', background: 'rgba(124,109,250,0.15)', color: '#7c6dfa', border: '1px solid rgba(124,109,250,0.3)' }}>
+                            {int}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+
+                    <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '1rem', lineHeight: '1.6' }}>
                       📍 Starts at: <b>{trip.startLocation?.name || 'Sri Lanka'}</b><br />
                       🚗 Total Distance: <b>{trip.totalDistance || 0} km</b><br />
-                      ⏱️ Total Driving: <b>{formatDuration(trip.totalDriveMinutes)}</b>
+                      ⏱️ Total Driving: <b>{formatDuration(trip.totalDriveMinutes)}</b><br />
+                      📅 Days: <b>{trip.days?.length || 0} Days</b> ({trip.days?.reduce((sum, d) => sum + (d.stops?.length || 0), 0) || 0} Total Stops)
                     </div>
                   </div>
 
@@ -1187,12 +1414,13 @@ const AutoGenerator = () => {
                       style={{ flex: 1, fontSize: '13px' }}
                       onClick={() => handleLoadSavedTrip(trip)}
                     >
-                      View & Edit
+                      View & Edit Itinerary
                     </button>
                     <button
                       className="btn btn-outline"
                       style={{ color: '#ff4d4f', borderColor: 'rgba(255,77,79,0.3)', padding: '6px 10px' }}
                       onClick={() => handleDeleteSavedTrip(trip.id)}
+                      title="Delete saved itinerary"
                     >
                       <Trash2 size={16} />
                     </button>
@@ -1202,8 +1430,7 @@ const AutoGenerator = () => {
             </div>
           )}
         </div>
-      )}
-    </div>
+      )}    </div>
   );
 };
 

@@ -16,7 +16,7 @@ const AdminDashboard = () => {
   const [editingUserId, setEditingUserId] = useState(null);
   const [editingUser, setEditingUser] = useState(null);
 
-  const [newLocation, setNewLocation] = useState({ name: '', description: '', district: '', imageUrl: '', latitude: 0, longitude: 0 });
+  const [newLocation, setNewLocation] = useState({ name: '', description: '', district: '', category: '', imageUrl: '', latitude: 0, longitude: 0 });
 
   // ✅ NEW: state for adding new accommodation
   const [newAccommodation, setNewAccommodation] = useState({ name: '', price: '', rating: '', imageUrl: '', locationId: '' });
@@ -196,7 +196,7 @@ const AdminDashboard = () => {
     e.preventDefault();
     try {
       await api.post('/admin/locations', newLocation);
-      setNewLocation({ name: '', description: '', district: '', imageUrl: '', latitude: 0, longitude: 0 });
+      setNewLocation({ name: '', description: '', district: '', category: '', imageUrl: '', latitude: 0, longitude: 0 });
       fetchData();
       alert("Location added successfully!");
     } catch (err) {
@@ -225,6 +225,7 @@ const AdminDashboard = () => {
                   <th style={{ padding: '0.5rem' }}>ID</th>
                   <th style={{ padding: '0.5rem' }}>Name</th>
                   <th style={{ padding: '0.5rem' }}>District</th>
+                  <th style={{ padding: '0.5rem' }}>Category</th>
                   <th style={{ padding: '0.5rem' }}>Actions</th>
                 </tr>
               </thead>
@@ -234,6 +235,11 @@ const AdminDashboard = () => {
                     <td style={{ padding: '0.5rem' }}>{loc.id}</td>
                     <td style={{ padding: '0.5rem' }}>{loc.name}</td>
                     <td style={{ padding: '0.5rem' }}>{loc.district}</td>
+                    <td style={{ padding: '0.5rem' }}>
+                      <span style={{ fontSize: '0.85rem', background: 'rgba(0,212,170,0.15)', color: 'var(--primary)', padding: '0.1rem 0.5rem', borderRadius: '12px' }}>
+                        {loc.category || 'N/A'}
+                      </span>
+                    </td>
                     <td style={{ padding: '0.5rem' }}>
                       <button onClick={() => startEditLocation(loc)} className="btn btn-outline" style={{ padding: '0.2rem 0.5rem', marginRight: '0.5rem' }}><Edit2 size={14}/></button>
                       <button onClick={() => handleDeleteLocation(loc.id)} className="btn btn-outline" style={{ padding: '0.2rem 0.5rem', color: '#ff4d4f', borderColor: '#ff4d4f' }}><Trash2 size={14}/></button>
@@ -249,6 +255,7 @@ const AdminDashboard = () => {
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginTop: '1rem' }}>
                   <input className="form-control" placeholder="Name" value={editingLocation.name} onChange={e => setEditingLocation({ ...editingLocation, name: e.target.value })} required />
                   <input className="form-control" placeholder="District" value={editingLocation.district} onChange={e => setEditingLocation({ ...editingLocation, district: e.target.value })} required />
+                  <input className="form-control" placeholder="Category / Interests (e.g. NATURE, WILDLIFE, HISTORY)" value={editingLocation.category || ''} onChange={e => setEditingLocation({ ...editingLocation, category: e.target.value })} style={{ gridColumn: 'span 2' }} />
                   <input className="form-control" placeholder="Image URL" value={editingLocation.imageUrl} onChange={e => setEditingLocation({ ...editingLocation, imageUrl: e.target.value })} required style={{ gridColumn: 'span 2' }} />
                   <textarea className="form-control" placeholder="Description" value={editingLocation.description} onChange={e => setEditingLocation({ ...editingLocation, description: e.target.value })} required style={{ gridColumn: 'span 2' }} />
                   <input className="form-control" type="number" step="0.0001" placeholder="Latitude" value={editingLocation.latitude} onChange={e => setEditingLocation({ ...editingLocation, latitude: parseFloat(e.target.value) })} required />
@@ -263,6 +270,7 @@ const AdminDashboard = () => {
             <form onSubmit={handleAddLocation} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginTop: '1rem' }}>
               <input className="form-control" placeholder="Name" value={newLocation.name} onChange={e => setNewLocation({...newLocation, name: e.target.value})} required />
               <input className="form-control" placeholder="District" value={newLocation.district} onChange={e => setNewLocation({...newLocation, district: e.target.value})} required />
+              <input className="form-control" placeholder="Category / Interests (e.g. NATURE, WILDLIFE, HISTORY)" value={newLocation.category} onChange={e => setNewLocation({...newLocation, category: e.target.value})} style={{ gridColumn: 'span 2' }} />
               <input className="form-control" placeholder="Image URL" value={newLocation.imageUrl} onChange={e => setNewLocation({...newLocation, imageUrl: e.target.value})} required style={{ gridColumn: 'span 2' }} />
               <textarea className="form-control" placeholder="Description" value={newLocation.description} onChange={e => setNewLocation({...newLocation, description: e.target.value})} required style={{ gridColumn: 'span 2' }} />
               <input className="form-control" type="number" step="0.0001" placeholder="Latitude" value={newLocation.latitude} onChange={e => setNewLocation({...newLocation, latitude: parseFloat(e.target.value)})} required />

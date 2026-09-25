@@ -60,6 +60,7 @@ public class AdminController {
         location.setName(locationDetails.getName());
         location.setDescription(locationDetails.getDescription());
         location.setDistrict(locationDetails.getDistrict());
+        location.setCategory(locationDetails.getCategory());
         location.setImageUrl(locationDetails.getImageUrl());
         location.setLatitude(locationDetails.getLatitude());
         location.setLongitude(locationDetails.getLongitude());

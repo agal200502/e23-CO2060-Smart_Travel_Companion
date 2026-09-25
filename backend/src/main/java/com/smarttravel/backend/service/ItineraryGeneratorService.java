@@ -45,30 +45,28 @@ public class ItineraryGeneratorService {
             throw new IllegalStateException("No locations available in database");
         }
 
-        // 3. Filter candidates by interest & must-visit
+        // 3. Filter candidates strictly by must-visit or selected interests
         Set<Long> mustVisitSet = new HashSet<>(request.getMustVisitLocationIds() != null ? request.getMustVisitLocationIds() : Collections.emptyList());
         List<String> userInterests = request.getInterests() != null ? request.getInterests() : Collections.emptyList();
 
         List<Location> candidateLocations = new ArrayList<>();
-        // Always include must visit places
-        for (Location loc : allLocations) {
-            if (mustVisitSet.contains(loc.getId())) {
-                candidateLocations.add(loc);
-            }
-        }
 
-        // Add interest-matching places
-        for (Location loc : allLocations) {
-            if (!candidateLocations.contains(loc) && !loc.getId().equals(startLocation.getId())) {
-                boolean matchesInterest = userInterests.isEmpty() || isLocationMatchingInterests(loc, userInterests);
-                if (matchesInterest) {
+        if (!mustVisitSet.isEmpty()) {
+            // User selected specific places in Step 4 -> candidate pool MUST ONLY contain selected places
+            for (Location loc : allLocations) {
+                if (mustVisitSet.contains(loc.getId())) {
                     candidateLocations.add(loc);
                 }
             }
-        }
-
-        // If candidates are still fewer than needed, add remaining locations
-        if (candidateLocations.isEmpty()) {
+        } else if (!userInterests.isEmpty()) {
+            // User selected interests in Step 3 -> candidate pool MUST ONLY contain interest-matching places
+            for (Location loc : allLocations) {
+                if (!loc.getId().equals(startLocation.getId()) && isLocationMatchingInterests(loc, userInterests)) {
+                    candidateLocations.add(loc);
+                }
+            }
+        } else {
+            // Fallback if no specific places or interests specified
             for (Location loc : allLocations) {
                 if (!loc.getId().equals(startLocation.getId())) {
                     candidateLocations.add(loc);
@@ -90,6 +88,7 @@ public class ItineraryGeneratorService {
         response.setPace(request.getPace());
         response.setBudgetTier(request.getBudgetTier());
         response.setDailyStartTime(request.getDailyStartTime());
+        response.setInterests(userInterests);
 
         double grandTotalDistance = 0.0;
         int grandTotalDriveMinutes = 0;
@@ -149,16 +148,25 @@ public class ItineraryGeneratorService {
     }
 
     private boolean isLocationMatchingInterests(Location loc, List<String> interests) {
-        if (loc.getCategory() != null) {
-            String cat = loc.getCategory().toUpperCase();
-            for (String interest : interests) {
-                if (cat.contains(interest.toUpperCase())) return true;
-            }
-        }
-        if (loc.getDescription() != null) {
-            String desc = loc.getDescription().toUpperCase();
-            for (String interest : interests) {
-                if (desc.contains(interest.toUpperCase())) return true;
+        if (interests == null || interests.isEmpty()) return false;
+        if (loc.getCategory() == null || loc.getCategory().trim().isEmpty()) return false;
+
+        String locCatRaw = loc.getCategory().toUpperCase();
+        String[] locCatTags = locCatRaw.split("[,;/|\\s]+");
+
+        for (String interest : interests) {
+            if (interest == null || interest.trim().isEmpty()) continue;
+            String normalizedInterest = interest.trim().toUpperCase();
+
+            for (String tag : locCatTags) {
+                String trimmedTag = tag.trim();
+                if (trimmedTag.isEmpty()) continue;
+                if (trimmedTag.contains(normalizedInterest) || normalizedInterest.contains(trimmedTag)) {
+                    return true;
+                }
+                if (normalizedInterest.contains("FOOD") && trimmedTag.contains("FOOD")) {
+                    return true;
+                }
             }
         }
         return false;

@@ -53,6 +53,11 @@ public class ItineraryService {
         itinerary.setDailyStartTime(dto.getDailyStartTime());
         itinerary.setTotalDistance(dto.getTotalDistance());
         itinerary.setTotalDriveMinutes(dto.getTotalDriveMinutes());
+        if (dto.getInterests() != null && !dto.getInterests().isEmpty()) {
+            itinerary.setInterests(String.join(",", dto.getInterests()));
+        } else {
+            itinerary.setInterests(null);
+        }
         itinerary.setCreatedAt(new Timestamp(System.currentTimeMillis()));
         itinerary.setUpdatedAt(new Timestamp(System.currentTimeMillis()));
 
@@ -131,6 +136,11 @@ public class ItineraryService {
         itinerary.setDailyStartTime(dto.getDailyStartTime());
         itinerary.setTotalDistance(dto.getTotalDistance());
         itinerary.setTotalDriveMinutes(dto.getTotalDriveMinutes());
+        if (dto.getInterests() != null && !dto.getInterests().isEmpty()) {
+            itinerary.setInterests(String.join(",", dto.getInterests()));
+        } else {
+            itinerary.setInterests(null);
+        }
         itinerary.setUpdatedAt(new Timestamp(System.currentTimeMillis()));
 
         itinerary.getDays().clear();
@@ -195,6 +205,11 @@ public class ItineraryService {
         response.setDailyStartTime(itinerary.getDailyStartTime());
         response.setTotalDistance(itinerary.getTotalDistance());
         response.setTotalDriveMinutes(itinerary.getTotalDriveMinutes());
+        if (itinerary.getInterests() != null && !itinerary.getInterests().trim().isEmpty()) {
+            response.setInterests(java.util.Arrays.asList(itinerary.getInterests().split(",")));
+        } else {
+            response.setInterests(new ArrayList<>());
+        }
 
         List<ItineraryDayDto> dayDtos = new ArrayList<>();
         if (itinerary.getDays() != null) {

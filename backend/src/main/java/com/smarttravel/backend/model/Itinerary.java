@@ -45,6 +45,9 @@ public class Itinerary {
     @Column(name = "total_drive_minutes")
     private Integer totalDriveMinutes = 0;
 
+    @Column(name = "interests", length = 500)
+    private String interests;
+
     @Column(name = "created_at")
     private Timestamp createdAt = new Timestamp(System.currentTimeMillis());
 
@@ -167,6 +170,14 @@ public class Itinerary {
 
     public void setTotalDriveMinutes(Integer totalDriveMinutes) {
         this.totalDriveMinutes = totalDriveMinutes;
+    }
+
+    public String getInterests() {
+        return interests;
+    }
+
+    public void setInterests(String interests) {
+        this.interests = interests;
     }
 
     public Timestamp getCreatedAt() {

@@ -18,6 +18,7 @@ public class ItineraryResponse {
     private String dailyStartTime;
     private Double totalDistance;
     private Integer totalDriveMinutes;
+    private List<String> interests = new ArrayList<>();
     private List<ItineraryDayDto> days = new ArrayList<>();
 
     public ItineraryResponse() {
@@ -101,6 +102,14 @@ public class ItineraryResponse {
 
     public void setTotalDriveMinutes(Integer totalDriveMinutes) {
         this.totalDriveMinutes = totalDriveMinutes;
+    }
+
+    public List<String> getInterests() {
+        return interests;
+    }
+
+    public void setInterests(List<String> interests) {
+        this.interests = interests;
     }
 
     public List<ItineraryDayDto> getDays() {
